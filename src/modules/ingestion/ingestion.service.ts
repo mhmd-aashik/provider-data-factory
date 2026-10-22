@@ -14,6 +14,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { IngestionError } from './schemas/ingestion-error.schema.js';
 
+type IngestionType = 'locations' | 'restaurant-listings' | 'menus';
+
 @Injectable()
 export class IngestionService {
   constructor(
@@ -27,7 +29,7 @@ export class IngestionService {
     private readonly errorModel: Model<IngestionError>,
   ) {}
 
-  async createRun(type: 'locations' | 'restaurant-listings' = 'locations') {
+  async createRun(type: IngestionType = 'locations') {
     const run = await this.runModel.create({
       provider: 'xbyte',
       status: IngestionRunStatus.PENDING,

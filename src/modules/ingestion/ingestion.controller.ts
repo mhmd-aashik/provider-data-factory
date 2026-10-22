@@ -24,9 +24,13 @@ export class IngestionController {
   createRun(@Body() body?: { type?: string }) {
     const type = body?.type ?? 'locations';
 
-    if (type !== 'locations' && type !== 'restaurant-listings') {
+    if (
+      type !== 'locations' &&
+      type !== 'restaurant-listings' &&
+      type !== 'menus'
+    ) {
       throw new BadRequestException(
-        'type must be locations or restaurant-listings',
+        'type must be locations, restaurant-listings, or menus',
       );
     }
 
