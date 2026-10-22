@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { NORMALIZED_DATABASE_NAME } from '../constants/location.constants.js';
 import {
@@ -8,7 +8,6 @@ import {
 import type { Model } from 'mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { run } from 'node:test';
 
 @Injectable()
 export class IngestionService {
@@ -51,5 +50,25 @@ export class IngestionService {
 
       throw error;
     }
+  }
+
+  async getRunById(runId: string) {
+    const run = await this.runModel.findById(runId).lean();
+  
+    if (!run) {
+      throw new NotFoundException(`Ingestion run ${runId} not found`);
+    }
+  
+    return {
+      runId: String(run._id),
+      provider: run.provider,
+      status: run.status,
+      processed: run.processed,
+      succeeded: run.succeeded,
+      failed: run.failed,
+      startedAt: run.startedAt ?? null,
+      completedAt: run.completedAt ?? null,
+      createdAt: run.createdAt,
+    };
   }
 }

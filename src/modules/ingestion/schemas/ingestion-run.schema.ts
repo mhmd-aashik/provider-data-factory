@@ -39,6 +39,9 @@ export class IngestionRun {
 
   @Prop({ type: Date })
   completedAt?: Date;
+
+  @Prop({ type: Date, default: Date.now })
+  createdAt!: Date;
 }
 
 export const IngestionRunSchema = SchemaFactory.createForClass(IngestionRun);
