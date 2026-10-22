@@ -9,9 +9,18 @@ if (!uri) {
 }
 
 const datasets = [
-  { file: 'locations.json', collection: 'raw_locations' },
-  { file: 'restaurant-details.json', collection: 'raw_restaurant_details' },
-  { file: 'restaurant-listings.json', collection: 'raw_restaurant_listings' },
+  {
+    file: 'compero-xbyte.xbyte-raw-locations.json',
+    collection: 'raw_locations',
+  },
+  {
+    file: 'compero-xbyte.xbyte-raw-restaurant-details.json',
+    collection: 'raw_restaurant_details',
+  },
+  {
+    file: 'compero-xbyte.xbyte-raw-restaurant-listings.json',
+    collection: 'raw_restaurant_listings',
+  },
 ];
 
 async function seedDatabase() {
