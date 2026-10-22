@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   DefaultValuePipe,
   Get,
@@ -20,8 +21,16 @@ export class IngestionController {
   ) {}
 
   @Post()
-  createRun() {
-    return this.ingestionService.createRun();
+  createRun(@Body() body?: { type?: string }) {
+    const type = body?.type ?? 'locations';
+
+    if (type !== 'locations' && type !== 'restaurant-listings') {
+      throw new BadRequestException(
+        'type must be locations or restaurant-listings',
+      );
+    }
+
+    return this.ingestionService.createRun(type);
   }
 
   @Get(':id')

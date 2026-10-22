@@ -27,20 +27,23 @@ export class IngestionService {
     private readonly errorModel: Model<IngestionError>,
   ) {}
 
-  async createRun() {
+  async createRun(type: 'locations' | 'restaurant-listings' = 'locations') {
     const run = await this.runModel.create({
-      provider: 'xbite',
+      provider: 'xbyte',
       status: IngestionRunStatus.PENDING,
     });
 
+    const jobName =
+      type === 'restaurant-listings'
+        ? 'process-restaurant-listings'
+        : 'process-locations';
+
     try {
       await this.ingestionQueue.add(
-        'process-locations',
+        jobName,
+        { runId: run.id },
         {
-          runId: run.id,
-        },
-        {
-          jobId: `locations-${run.id}`,
+          jobId: `${type}-${run.id}`,
           attempts: 3,
           backoff: {
             type: 'exponential',
@@ -58,6 +61,12 @@ export class IngestionService {
 
       throw error;
     }
+
+    return {
+      runId: run.id,
+      type,
+      status: IngestionRunStatus.PENDING,
+    };
   }
 
   async getRunById(runId: string) {

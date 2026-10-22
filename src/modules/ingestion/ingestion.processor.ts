@@ -5,10 +5,16 @@ import type { Job } from 'bullmq';
 import type { Model } from 'mongoose';
 
 import { LocationsService } from '../locations/locations.service.js';
+import { RestaurantsService } from '../restaurants/restaurants.service.js';
+
 import {
   IngestionRun,
   IngestionRunStatus,
 } from './schemas/ingestion-run.schema.js';
+
+type IngestionJobData = {
+  runId: string;
+};
 
 @Injectable()
 @Processor('ingestion', {
@@ -21,18 +27,23 @@ export class IngestionProcessor extends WorkerHost {
     @Inject(LocationsService)
     private readonly locationsService: LocationsService,
 
+    @Inject(RestaurantsService)
+    private readonly restaurantsService: RestaurantsService,
+
     @InjectModel(IngestionRun.name, 'normalized')
     private readonly runModel: Model<IngestionRun>,
   ) {
     super();
   }
 
-  async process(job: Job<{ runId: string }>): Promise<unknown> {
-    if (job.name !== 'process-locations') {
-      throw new Error(`Unknown job name: ${job.name}`);
-    }
-
+  async process(job: Job<IngestionJobData>) {
     const { runId } = job.data;
+
+    const run = await this.runModel.findById(runId);
+
+    if (!run) {
+      throw new Error(`Ingestion run ${runId} not found`);
+    }
 
     await this.runModel.findByIdAndUpdate(runId, {
       status: IngestionRunStatus.RUNNING,
@@ -40,20 +51,37 @@ export class IngestionProcessor extends WorkerHost {
     });
 
     try {
-      this.logger.log(`Starting job ${job.id}`);
+      this.logger.log(`Starting ${job.name}: ${job.id}`);
 
-      const result = await this.locationsService.processLocations();
+      let result: {
+        read: number;
+        written: number;
+        invalid?: number;
+      };
+
+      switch (job.name) {
+        case 'process-locations':
+          result = await this.locationsService.processLocations();
+          break;
+
+        case 'process-restaurant-listings':
+          result = await this.restaurantsService.processRestaurantListings();
+          break;
+
+        default:
+          throw new Error(`Unknown job name: ${job.name}`);
+      }
 
       await this.runModel.findByIdAndUpdate(runId, {
         status: IngestionRunStatus.COMPLETED,
         processed: result.read,
         succeeded: result.written,
-        failed: 0,
+        failed: result.invalid ?? 0,
         completedAt: new Date(),
       });
 
       this.logger.log(
-        `Finished job ${job.id}: read=${result.read}, written=${result.written}`,
+        `Finished ${job.name}: read=${result.read}, written=${result.written}, invalid=${result.invalid ?? 0}`,
       );
 
       return result;

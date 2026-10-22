@@ -16,6 +16,7 @@ import {
   IngestionError,
   IngestionErrorSchema,
 } from './schemas/ingestion-error.schema.js';
+import { RestaurantsModule } from '../restaurants/restaurants.module.js';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import {
     ),
 
     LocationsModule,
+    RestaurantsModule,
   ],
   controllers: [IngestionController],
   providers: [IngestionProcessor, IngestionService],
