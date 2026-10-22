@@ -58,7 +58,7 @@ export class LocationsService {
           update: {
             $set: location,
           },
-          upset: true,
+          upsert: true,
         },
       }));
 

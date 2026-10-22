@@ -10,6 +10,8 @@ import {
   IngestionRunSchema,
 } from './schemas/ingestion-run.schema.js';
 import { NORMALIZED_DATABASE_NAME } from '../constants/location.constants.js';
+import { IngestionController } from './ingestion.controller.js';
+import { IngestionService } from './ingestion.service.js';
 
 @Module({
   imports: [
@@ -34,7 +36,8 @@ import { NORMALIZED_DATABASE_NAME } from '../constants/location.constants.js';
 
     LocationsModule,
   ],
-  providers: [IngestionProcessor],
+  controllers: [IngestionController],
+  providers: [IngestionProcessor, IngestionService],
   exports: [IngestionProcessor],
 })
 export class IngestionModule {}
