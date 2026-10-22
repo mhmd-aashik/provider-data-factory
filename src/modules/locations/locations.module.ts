@@ -8,6 +8,7 @@ import {
   RAW_DATABASE_NAME,
   RAW_LOCATION_MODEL_TOKEN,
 } from '../constants/location.constants.js';
+import { LocationsService } from './locations.service.js';
 
 const RawLocationSchema = new Schema(
   {},
@@ -28,6 +29,7 @@ const RawLocationSchema = new Schema(
       RAW_DATABASE_NAME,
     ),
   ],
-  exports: [MongooseModule],
+  providers: [LocationsService],
+  exports: [LocationsService],
 })
 export class LocationsModule {}
