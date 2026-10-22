@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
+import { EJSON } from 'bson';
 import { readFile } from 'node:fs/promises';
 import 'dotenv/config';
 
-const uri = process.env.MONGO_RAW_URI!;
+const uri = process.env.MONGO_RAW_URI;
 
 if (!uri) {
   throw new Error('MONGO_RAW_URI is not set');
@@ -10,53 +11,55 @@ if (!uri) {
 
 const datasets = [
   {
-    file: 'compero-xbyte.xbyte-raw-locations.json',
+    file: 'raw-locations.json',
     collection: 'raw_locations',
   },
   {
-    file: 'compero-xbyte.xbyte-raw-restaurant-details.json',
-    collection: 'raw_restaurant_details',
+    file: 'raw-restaurants.json',
+    collection: 'raw_restaurants',
   },
   {
-    file: 'compero-xbyte.xbyte-raw-restaurant-listings.json',
-    collection: 'raw_restaurant_listings',
+    file: 'raw-menus.json',
+    collection: 'raw_menus',
   },
 ];
 
 async function seedDatabase() {
-  await mongoose.connect(uri);
+  try {
+    await mongoose.connect(uri!);
 
-  const db = mongoose.connection.db;
+    const db = mongoose.connection.db;
 
-  if (!db) {
-    throw new Error('MongoDB connection unavailable');
-  }
-
-  for (const dataset of datasets) {
-    const content = await readFile(`data/${dataset.file}`, 'utf8');
-
-    const parsed: unknown = JSON.parse(content);
-
-    if (!Array.isArray(parsed)) {
-      throw new Error(`${dataset.file} must contain a JSON array`);
+    if (!db) {
+      throw new Error('MongoDB connection unavailable');
     }
 
-    const collection = db.collection(dataset.collection);
+    for (const dataset of datasets) {
+      const content = await readFile(`data/${dataset.file}`, 'utf8');
 
-    await collection.deleteMany({});
+      // Convert MongoDB Extended JSON to BSON
+      const parsed: unknown = EJSON.parse(content);
 
-    if (parsed.length > 0) {
-      await collection.insertMany(parsed as Record<string, unknown>[]);
+      if (!Array.isArray(parsed)) {
+        throw new Error(`${dataset.file} must contain a JSON array`);
+      }
+
+      const collection = db.collection(dataset.collection);
+
+      await collection.deleteMany({});
+
+      if (parsed.length > 0) {
+        await collection.insertMany(parsed as Record<string, unknown>[]);
+      }
+
+      console.log(`${dataset.collection}: ${parsed.length} documents imported`);
     }
-
-    console.log(`${dataset.collection}: ${parsed.length} documents imported`);
+  } finally {
+    await mongoose.disconnect();
   }
-
-  await mongoose.disconnect();
 }
 
-seedDatabase().catch(async (error) => {
+seedDatabase().catch((error) => {
   console.error('Seed failed:', error.message);
-  await mongoose.disconnect();
   process.exitCode = 1;
 });
