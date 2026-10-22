@@ -12,6 +12,10 @@ import {
 import { NORMALIZED_DATABASE_NAME } from '../constants/location.constants.js';
 import { IngestionController } from './ingestion.controller.js';
 import { IngestionService } from './ingestion.service.js';
+import {
+  IngestionError,
+  IngestionErrorSchema,
+} from './schemas/ingestion-error.schema.js';
 
 @Module({
   imports: [
@@ -30,7 +34,10 @@ import { IngestionService } from './ingestion.service.js';
     }),
 
     MongooseModule.forFeature(
-      [{ name: IngestionRun.name, schema: IngestionRunSchema }],
+      [
+        { name: IngestionRun.name, schema: IngestionRunSchema },
+        { name: IngestionError.name, schema: IngestionErrorSchema },
+      ],
       NORMALIZED_DATABASE_NAME,
     ),
 
