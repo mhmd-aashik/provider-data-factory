@@ -15,6 +15,9 @@ export class IngestionError {
   provider!: string;
 
   @Prop({ required: true })
+  errorKey!: string;
+
+  @Prop({ required: true })
   stage!: string;
 
   @Prop({ required: true })
@@ -30,8 +33,4 @@ export class IngestionError {
 export const IngestionErrorSchema =
   SchemaFactory.createForClass(IngestionError);
 
-IngestionErrorSchema.index({
-  runId: 1,
-  createdAt: -1,
-  _id: -1,
-});
+IngestionErrorSchema.index({ runId: 1, errorKey: 1 }, { unique: true });

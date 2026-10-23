@@ -54,6 +54,7 @@ export class MenusService {
       stats.read++;
 
       const provider = document.domain?.trim() || 'unknown';
+      const sourceId = String(document._id);
 
       // Skip provider error responses
       if (document.payload?.Message) {
@@ -72,6 +73,8 @@ export class MenusService {
           provider,
           'menu',
           'Missing or invalid payload.results',
+          sourceId,
+          'payload.results',
         );
 
         continue;
@@ -90,6 +93,8 @@ export class MenusService {
           provider,
           error.stage,
           error.reason,
+          sourceId,
+          `payload.results[${error.index}]`,
         );
       }
 
