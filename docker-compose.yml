@@ -29,6 +29,25 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      MONGO_RAW_URI: mongodb://mongodb:27017/provider_raw
+      MONGO_TARGET_URI: mongodb://mongodb:27017/provider_normalized
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      INGESTION_BATCH_SIZE: '50'
+    depends_on:
+      - mongodb
+      - redis
+
 volumes:
   mongodb_data:
   redis_data:
