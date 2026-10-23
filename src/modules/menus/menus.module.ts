@@ -11,6 +11,7 @@ import {
   RestaurantSchema,
 } from '../restaurants/schemas/restaurant.schema.js';
 import { MenusService } from './menus.service.js';
+import { IngestionErrorsModule } from '../ingestion/ingestion-errors.module.js';
 
 const RawMenuSchema = new Schema(
   {},
@@ -48,6 +49,8 @@ const RawMenuSchema = new Schema(
       ],
       'normalized',
     ),
+
+    IngestionErrorsModule,
   ],
   providers: [MenusService],
   exports: [MenusService],

@@ -6,6 +6,7 @@ import type { Model } from 'mongoose';
 
 import { LocationsService } from '../locations/locations.service.js';
 import { RestaurantsService } from '../restaurants/restaurants.service.js';
+import { MenusService } from '../menus/menus.service.js';
 
 import {
   IngestionRun,
@@ -14,6 +15,12 @@ import {
 
 type IngestionJobData = {
   runId: string;
+};
+
+type IngestionResult = {
+  read: number;
+  written: number;
+  invalid?: number;
 };
 
 @Injectable()
@@ -30,13 +37,16 @@ export class IngestionProcessor extends WorkerHost {
     @Inject(RestaurantsService)
     private readonly restaurantsService: RestaurantsService,
 
+    @Inject(MenusService)
+    private readonly menusService: MenusService,
+
     @InjectModel(IngestionRun.name, 'normalized')
     private readonly runModel: Model<IngestionRun>,
   ) {
     super();
   }
 
-  async process(job: Job<IngestionJobData>) {
+  async process(job: Job<IngestionJobData>): Promise<IngestionResult> {
     const { runId } = job.data;
 
     const run = await this.runModel.findById(runId);
@@ -47,17 +57,14 @@ export class IngestionProcessor extends WorkerHost {
 
     await this.runModel.findByIdAndUpdate(runId, {
       status: IngestionRunStatus.RUNNING,
-      startedAt: new Date(),
+      startedAt: run.startedAt ?? new Date(),
+      completedAt: null,
     });
 
     try {
       this.logger.log(`Starting ${job.name}: ${job.id}`);
 
-      let result: {
-        read: number;
-        written: number;
-        invalid?: number;
-      };
+      let result: IngestionResult;
 
       switch (job.name) {
         case 'process-locations':
@@ -66,6 +73,10 @@ export class IngestionProcessor extends WorkerHost {
 
         case 'process-restaurant-listings':
           result = await this.restaurantsService.processRestaurantListings();
+          break;
+
+        case 'process-menus':
+          result = await this.menusService.processMenus(runId);
           break;
 
         default:
@@ -86,12 +97,19 @@ export class IngestionProcessor extends WorkerHost {
 
       return result;
     } catch (error) {
+      const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+
       await this.runModel.findByIdAndUpdate(runId, {
-        status: IngestionRunStatus.FAILED,
-        completedAt: new Date(),
+        status: isFinalAttempt
+          ? IngestionRunStatus.FAILED
+          : IngestionRunStatus.PENDING,
+        completedAt: isFinalAttempt ? new Date() : null,
       });
 
-      this.logger.error(`Job ${job.id} failed`);
+      this.logger.error(
+        `Job ${job.id} failed on attempt ${job.attemptsMade + 1}`,
+        error instanceof Error ? error.stack : String(error),
+      );
 
       throw error;
     }

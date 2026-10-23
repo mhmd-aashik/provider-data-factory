@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 
 import { transformMenus } from '../pipeline/menu.pipeline.js';
+import { IngestionErrorService } from '../ingestion/ingestion-error.service.js';
 
 interface RawMenuDocument {
   domain?: string;
@@ -31,9 +32,12 @@ export class MenusService {
 
     @InjectModel('MenuItem', 'normalized')
     private readonly itemModel: MenuModel,
+
+    @Inject(IngestionErrorService)
+    private readonly ingestionErrorService: IngestionErrorService,
   ) {}
 
-  async processMenus() {
+  async processMenus(runId: string) {
     const cursor = this.rawMenuModel.find().sort({ _id: 1 }).lean().cursor();
 
     const stats = {
@@ -49,6 +53,9 @@ export class MenusService {
     for await (const document of cursor) {
       stats.read++;
 
+      const provider = document.domain?.trim() || 'unknown';
+
+      // Skip provider error responses
       if (document.payload?.Message) {
         stats.skipped++;
         continue;
@@ -56,18 +63,37 @@ export class MenusService {
 
       const results = document.payload?.results;
 
+      // Quarantine invalid payloads
       if (!Array.isArray(results)) {
         stats.invalid++;
+
+        await this.ingestionErrorService.saveError(
+          runId,
+          provider,
+          'menu',
+          'Missing or invalid payload.results',
+        );
+
         continue;
       }
 
-      const provider = document.domain?.trim() ?? '';
       const restaurantUrl = document.params?.restaurant_url ?? '';
 
       const transformed = transformMenus(results, provider, restaurantUrl);
 
+      // Save validation errors
       stats.invalid += transformed.errors.length;
 
+      for (const error of transformed.errors) {
+        await this.ingestionErrorService.saveError(
+          runId,
+          provider,
+          error.stage,
+          error.reason,
+        );
+      }
+
+      // 1. Restaurants
       if (transformed.restaurants.length > 0) {
         const operations = transformed.restaurants.map((restaurant) => ({
           updateOne: {
@@ -89,6 +115,7 @@ export class MenusService {
         stats.restaurants += transformed.restaurants.length;
       }
 
+      // 2. Menu categories
       if (transformed.categories.length > 0) {
         const operations = transformed.categories.map((category) => ({
           updateOne: {
@@ -111,6 +138,7 @@ export class MenusService {
         stats.categories += transformed.categories.length;
       }
 
+      // 3. Menu items
       if (transformed.items.length > 0) {
         const operations = transformed.items.map((item) => ({
           updateOne: {
