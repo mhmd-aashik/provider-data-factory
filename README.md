@@ -1,168 +1,164 @@
+# Quick Start — Provider Data Factory
 
-# Provider Data Factory
+## Prerequisites
 
-A NestJS backend application that ingests raw restaurant-provider data, transforms and deduplicates it, and stores normalized records in MongoDB.
+- Docker Desktop with Docker Compose
+- Git
+- Bun (for seeding and running tests locally)
 
-## Technology Stack
-
-- NestJS 12 / TypeScript / Node.js
-- MongoDB and Mongoose
-- BullMQ and Redis
-- Vitest
-- Docker Compose
-
-## Architecture
-
-The application uses two MongoDB databases:
-
-- `provider_raw` — original provider data
-- `provider_normalized` — transformed records and ingestion tracking
-
-Raw collections:
-- `raw_locations`
-- `raw_restaurant_listings`
-- `raw_menus`
-
-Normalized collections:
-- `locations`
-- `restaurants`
-- `restaurant_locations`
-- `menu_categories`
-- `menu_items`
-
-## Processing Flow
-
-1. An API request creates an ingestion run.
-2. BullMQ queues the appropriate ingestion job.
-3. A NestJS worker reads raw MongoDB documents.
-4. Pipeline functions validate, transform and deduplicate records.
-5. Mongoose bulk upserts persist normalized records.
-6. Invalid records are recorded for investigation.
-7. Run counters and checkpoints track progress.
-
-## Local Setup
-
-Install dependencies:
+## 1. Clone the repository
 
 ```bash
-bun install
+git clone https://github.com/mhmd-aashik/provider-data-factory.git
+cd provider-data-factory
 ```
 
-Start MongoDB and Redis:
+For a private repository, GitHub access must be granted to the reviewer.
+
+## 2. Install dependencies
 
 ```bash
-docker compose up -d mongodb redis
+bun install --frozen-lockfile
 ```
 
-Start the application locally:
-
-```bash
-bun run start:dev
-```
-
-Alternatively, once the Docker image is verified, start the full stack:
+## 3. Start the application
 
 ```bash
 docker compose up --build -d
 ```
 
-## Database Seeding
+This starts three services:
 
-Run the repository's existing seed script to populate the raw MongoDB collections.
+- MongoDB 7
+- Redis 7
+- NestJS application
 
-The exact seed command should be documented after checking `scripts/seed.ts` and its package/runtime requirements.
+Check container status:
 
-## API Endpoints
-
-### Start ingestion
-
-```http
-POST /runs
-Content-Type: application/json
-
-{
-  "type": "menus"
-}
+```bash
+docker compose ps
 ```
 
-Supported ingestion types:
-- `locations`
-- `restaurant-listings`
-- `menus`
+## 4. Verify application health
 
-### Check ingestion status
-
-```http
-GET /runs/:id
+```bash
+curl http://localhost:3000/health
 ```
 
-### Inspect ingestion errors
+The response should report `healthy`, with MongoDB and Redis services `up`.
 
-```http
-GET /runs/:id/errors?page=1&limit=10
+## 5. Seed the raw database
+
+```bash
+MONGO_RAW_URI="mongodb://127.0.0.1:27017/provider_raw" bun scripts/seed.ts
 ```
 
-### Health check
+The script imports the three files in `data/` into:
 
-```http
-GET /health
+- `provider_raw.raw_locations`
+- `provider_raw.raw_restaurants`
+- `provider_raw.raw_menus`
+
+**Important:** Running the seed script deletes existing documents from these three raw collections before importing the source files. Use a dedicated local environment.
+
+Verify the imported records:
+
+```bash
+docker compose exec mongodb mongosh --quiet provider_raw --eval '
+printjson({
+  locations: db.raw_locations.countDocuments({}),
+  restaurants: db.raw_restaurants.countDocuments({}),
+  menus: db.raw_menus.countDocuments({})
+})
+'
 ```
 
-The health endpoint checks MongoDB and Redis connectivity.
+## 6. Trigger ingestion
 
-## Testing
+Process locations:
 
-Run all tests:
+```bash
+curl -X POST http://localhost:3000/runs \
+  -H "Content-Type: application/json" \
+  -d '{"type":"locations"}'
+```
+
+Process restaurant listings:
+
+```bash
+curl -X POST http://localhost:3000/runs \
+  -H "Content-Type: application/json" \
+  -d '{"type":"restaurant-listings"}'
+```
+
+Process menus:
+
+```bash
+curl -X POST http://localhost:3000/runs \
+  -H "Content-Type: application/json" \
+  -d '{"type":"menus"}'
+```
+
+Each request returns a `runId`.
+
+## 7. Monitor ingestion
+
+Replace `YOUR_RUN_ID` with the ID returned by the API:
+
+```bash
+curl http://localhost:3000/runs/YOUR_RUN_ID
+```
+
+The run status progresses from `pending` to `running` and finally `completed` or `failed`.
+
+Inspect paginated ingestion errors:
+
+```bash
+curl "http://localhost:3000/runs/YOUR_RUN_ID/errors?page=1&limit=10"
+```
+
+## 8. Verify normalized data
+
+```bash
+docker compose exec mongodb mongosh --quiet provider_normalized --eval '
+printjson({
+  restaurants: db.restaurants.countDocuments({}),
+  menu_categories: db.menu_categories.countDocuments({}),
+  menu_items: db.menu_items.countDocuments({})
+})
+'
+```
+
+For the provided dataset, the verified results after menu ingestion are:
+
+| Collection      | Documents |
+| --------------- | --------: |
+| restaurants     |       345 |
+| menu_categories |     4,135 |
+| menu_items      |    30,936 |
+
+The normalized database is populated by ingestion, not by the seed script.
+
+## 9. Run tests
 
 ```bash
 bun run test
-```
-
-Run the menu pipeline integration tests:
-
-```bash
-bunx vitest run test/menu-pipeline.integration.spec.ts
-```
-
-Check TypeScript:
-
-```bash
 bunx tsc --noEmit
+bun run build
 ```
 
-## Verified Results
+Verified fresh-clone result: 13 tests passed across 4 test files, with successful TypeScript validation and production build.
 
-Menu ingestion was tested against the provided raw dataset.
+## 10. Stop the application
 
-Normalized document counts:
-- Restaurants: 345
-- Menu categories: 4,135
-- Menu items: 30,936
+```bash
+docker compose down
+```
 
-A subsequent completed ingestion run preserved these collection counts.
+This stops the containers while preserving database volumes.
 
-Five MongoDB-backed menu integration tests passed, covering persistence, repeat ingestion, invalid-record handling and checkpoints.
+## Current limitations
 
-## Engineering Decisions
-
-- Separate raw and normalized databases preserve source records.
-- Mongoose upserts support repeatable ingestion.
-- Unique business keys help prevent duplicate records.
-- Pure transformation functions are independently testable.
-- BullMQ separates ingestion requests from background processing.
-- Error quarantine allows valid records to continue processing.
-- Checkpoints support resuming partially processed menu ingestion.
-
-## Known Limitations
-
-- The current menu integration test exercises the service and MongoDB, not the complete BullMQ dispatch path.
-- Cursor batch size is not equivalent to independent BullMQ batch jobs.
-- Full Docker startup and fresh-environment seeding require final verification.
-- Other pipeline recovery behavior requires separate verification.
-
-## Future Improvements
-
-- Independent dispatcher and batch-worker jobs
-- Additional provider adapters and declarative mappings
-- Expanded end-to-end queue integration testing
-- More detailed per-stage metrics and structured logging
+- Ingestion currently uses one BullMQ job per run, with MongoDB cursor batching for menu processing. Independent BullMQ batch-job dispatch is not implemented.
+- Full queue failure recovery and dead-letter handling have not been verified through end-to-end tests.
+- Menu ingestion has integration tests for persistence, idempotency, invalid data handling, and checkpoint continuation.
