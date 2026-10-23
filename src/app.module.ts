@@ -7,7 +7,7 @@ import { LocationsModule } from './modules/locations/locations.module.js';
 import { RestaurantsModule } from './modules/restaurants/restaurants.module.js';
 import { MenusModule } from './modules/menus/menus.module.js';
 import { IngestionModule } from './modules/ingestion/ingestion.module.js';
-
+import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
   imports: [
@@ -33,6 +33,7 @@ import { IngestionModule } from './modules/ingestion/ingestion.module.js';
     RestaurantsModule,
     MenusModule,
     IngestionModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
