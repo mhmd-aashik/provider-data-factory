@@ -32,9 +32,14 @@ import { IngestionErrorsModule } from './ingestion-errors.module.js';
         }),
       }),
     }),
-    BullModule.registerQueue({
-      name: 'ingestion',
-    }),
+    BullModule.registerQueue(
+      {
+        name: 'ingestion',
+      },
+      {
+        name: 'ingestion-dead-letter',
+      },
+    ),
 
     MongooseModule.forFeature(
       [

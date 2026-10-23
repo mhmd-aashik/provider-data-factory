@@ -1,7 +1,7 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Job } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import type { Model } from 'mongoose';
 
 import { LocationsService } from '../locations/locations.service.js';
@@ -42,6 +42,9 @@ export class IngestionProcessor extends WorkerHost {
 
     @InjectModel(IngestionRun.name, 'normalized')
     private readonly runModel: Model<IngestionRun>,
+
+    @InjectQueue('ingestion-dead-letter')
+    private readonly deadLetterQueue: Queue,
   ) {
     super();
   }
@@ -119,7 +122,12 @@ export class IngestionProcessor extends WorkerHost {
 
       return result;
     } catch (error) {
-      const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      const attempt = job.attemptsMade + 1;
+      const maxAttempts = job.opts.attempts ?? 1;
+      const isFinalAttempt = attempt >= maxAttempts;
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       const completedAt = isFinalAttempt ? new Date() : null;
 
@@ -139,9 +147,37 @@ export class IngestionProcessor extends WorkerHost {
         ...(isFinalAttempt ? { durationMs } : {}),
       });
 
+      if (isFinalAttempt) {
+        try {
+          await this.deadLetterQueue.add(
+            'failed-ingestion',
+            {
+              runId,
+              originalJobId: job.id,
+              originalJobName: job.name,
+              error: 'Ingestion processing failed',
+              attempts: attempt,
+              failedAt: new Date().toISOString(),
+            },
+            {
+              jobId: `failed-${runId}`,
+              removeOnComplete: false,
+              removeOnFail: false,
+            },
+          );
+
+          this.logger.warn(`Job ${job.id} recorded in dead-letter queue`);
+        } catch (dlqError) {
+          this.logger.error(
+            `Failed to record dead-letter job ${job.id}`,
+            dlqError instanceof Error ? dlqError.stack : String(dlqError),
+          );
+        }
+      }
+
       this.logger.error(
-        `Job ${job.id} failed on attempt ${job.attemptsMade + 1}`,
-        error instanceof Error ? error.stack : String(error),
+        `Job ${job.id} failed on attempt ${attempt}/${maxAttempts}`,
+        error instanceof Error ? error.stack : errorMessage,
       );
 
       throw error;
