@@ -38,10 +38,13 @@ export class IngestionService {
       status: IngestionRunStatus.PENDING,
     });
 
-    const jobName =
-      type === 'restaurant-listings'
-        ? 'process-restaurant-listings'
-        : 'process-locations';
+    const jobNames: Record<IngestionType, string> = {
+      locations: 'process-locations',
+      'restaurant-listings': 'process-restaurant-listings',
+      menus: 'process-menus',
+    };
+
+    const jobName = jobNames[type];
 
     try {
       await this.ingestionQueue.add(

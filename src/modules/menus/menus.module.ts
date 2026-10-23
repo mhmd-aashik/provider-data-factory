@@ -21,7 +21,7 @@ const RawMenuSchema = new Schema(
   {},
   {
     strict: false,
-    collection: 'raw_menus',
+    collection: 'raw_restaurant_details',
   },
 );
 
