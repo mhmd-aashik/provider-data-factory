@@ -40,6 +40,27 @@ export class IngestionRun {
   @Prop({ type: Date })
   completedAt?: Date;
 
+  @Prop({ type: String, default: null })
+  lastProcessedId!: string | null;
+
+  @Prop({ type: Number, default: 0 })
+  batchNumber!: number;
+
+  @Prop({ type: Number, default: 0 })
+  skipped!: number;
+
+  @Prop({ type: Number, default: 0 })
+  restaurants!: number;
+
+  @Prop({ type: Number, default: 0 })
+  categories!: number;
+
+  @Prop({ type: Number, default: 0 })
+  items!: number;
+
+  @Prop({ type: Number, default: 0 })
+  durationMs!: number;
+
   @Prop({ type: Date, default: Date.now })
   createdAt!: Date;
 }

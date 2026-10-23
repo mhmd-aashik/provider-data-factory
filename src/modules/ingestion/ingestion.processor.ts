@@ -83,27 +83,60 @@ export class IngestionProcessor extends WorkerHost {
           throw new Error(`Unknown job name: ${job.name}`);
       }
 
+      // Preserve cumulative counters for menu ingestion.
+      const completedAt = new Date();
+
+      const completedRun = await this.runModel.findById(runId);
+
+      const durationMs = completedRun?.startedAt
+        ? Math.max(
+            0,
+            completedAt.getTime() - new Date(completedRun.startedAt).getTime(),
+          )
+        : 0;
+
       await this.runModel.findByIdAndUpdate(runId, {
         status: IngestionRunStatus.COMPLETED,
-        processed: result.read,
-        succeeded: result.written,
-        failed: result.invalid ?? 0,
-        completedAt: new Date(),
+        completedAt,
+        durationMs,
+
+        ...(job.name === 'process-menus'
+          ? {}
+          : {
+              processed: result.read,
+              succeeded: result.written,
+              failed: result.invalid ?? 0,
+            }),
       });
 
       this.logger.log(
-        `Finished ${job.name}: read=${result.read}, written=${result.written}, invalid=${result.invalid ?? 0}`,
+        `Finished ${job.name}: ` +
+          `read=${result.read}, ` +
+          `written=${result.written}, ` +
+          `invalid=${result.invalid ?? 0}, ` +
+          `durationMs=${durationMs}`,
       );
 
       return result;
     } catch (error) {
       const isFinalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
 
+      const completedAt = isFinalAttempt ? new Date() : null;
+
+      const durationMs =
+        completedAt && run.startedAt
+          ? Math.max(
+              0,
+              completedAt.getTime() - new Date(run.startedAt).getTime(),
+            )
+          : 0;
+
       await this.runModel.findByIdAndUpdate(runId, {
         status: isFinalAttempt
           ? IngestionRunStatus.FAILED
           : IngestionRunStatus.PENDING,
-        completedAt: isFinalAttempt ? new Date() : null,
+        completedAt,
+        ...(isFinalAttempt ? { durationMs } : {}),
       });
 
       this.logger.error(
