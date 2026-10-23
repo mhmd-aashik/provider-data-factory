@@ -37,6 +37,29 @@ export class IngestionController {
     return this.ingestionService.createRun(type);
   }
 
+  @Get('failed-jobs')
+  async getFailedJobs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedPage = Number(page ?? 1);
+    const parsedLimit = Number(limit ?? 20);
+
+    if (
+      !Number.isSafeInteger(parsedPage) ||
+      parsedPage < 1 ||
+      !Number.isSafeInteger(parsedLimit) ||
+      parsedLimit < 1 ||
+      parsedLimit > 100
+    ) {
+      throw new BadRequestException(
+        'page must be a positive integer and limit must be between 1 and 100',
+      );
+    }
+
+    return this.ingestionService.getFailedJobs(parsedPage, parsedLimit);
+  }
+
   @Get(':id')
   getRun(@Param('id', ParseObjectIdPipe) id: string) {
     return this.ingestionService.getRunById(id);

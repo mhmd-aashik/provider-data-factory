@@ -27,6 +27,9 @@ export class IngestionService {
 
     @InjectModel(IngestionError.name, 'normalized')
     private readonly errorModel: Model<IngestionError>,
+
+    @InjectQueue('ingestion-dead-letter')
+    private readonly deadLetterQueue: Queue,
   ) {}
 
   async createRun(type: IngestionType = 'locations') {
@@ -118,6 +121,51 @@ export class IngestionService {
       total,
       totalPages: Math.ceil(total / limit),
       errors,
+    };
+  }
+
+  async getFailedJobs(page = 1, limit = 20) {
+    const safePage = Math.max(1, Math.floor(page));
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)));
+
+    const start = (safePage - 1) * safeLimit;
+    const end = start + safeLimit - 1;
+
+    const [jobs, total] = await Promise.all([
+      this.deadLetterQueue.getJobs(
+        ['waiting', 'delayed', 'active', 'completed', 'failed'],
+        start,
+        end,
+        true,
+      ),
+      this.deadLetterQueue.getJobCounts(
+        'waiting',
+        'delayed',
+        'active',
+        'completed',
+        'failed',
+      ),
+    ]);
+
+    const totalCount = Object.values(total).reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+
+    return {
+      page: safePage,
+      limit: safeLimit,
+      total: totalCount,
+      totalPages: Math.ceil(totalCount / safeLimit),
+      jobs: jobs.map((job) => ({
+        id: job.id,
+        runId: job.data.runId,
+        originalJobId: job.data.originalJobId,
+        originalJobName: job.data.originalJobName,
+        error: job.data.error,
+        attempts: job.data.attempts,
+        failedAt: job.data.failedAt,
+      })),
     };
   }
 }
